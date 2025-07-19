@@ -1,12 +1,23 @@
 -- Set up storage permissions
 BEGIN;
-SET LOCAL ROLE postgres;
+
+-- Switch to superuser role
+SET ROLE postgres;
 
 -- Create or update storage schema if needed
-CREATE SCHEMA IF NOT EXISTS storage;
+CREATE SCHEMA IF NOT EXISTS storage AUTHORIZATION postgres;
+
+-- Grant usage on storage schema
+GRANT USAGE ON SCHEMA storage TO postgres, authenticated, anon;
+GRANT ALL ON SCHEMA storage TO postgres;
+
+-- Grant access to storage.objects
+GRANT ALL ON storage.objects TO postgres;
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
+GRANT SELECT ON storage.objects TO anon;
 
 -- Enable row level security for storage
-ALTER TABLE IF EXISTS storage.objects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if any
 DROP POLICY IF EXISTS "Authenticated users can upload goat photos" ON storage.objects;

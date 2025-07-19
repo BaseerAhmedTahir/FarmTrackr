@@ -1,5 +1,21 @@
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NO-- Drop and recreate expenses table
+DROP TABLE IF EXISTS public.expenses CASCADE;
+
+CREATE TABLE public.expenses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    goat_id UUID REFERENCES public.goats(id) ON DELETE CASCADE,
+    amount DECIMAL(10,2) NOT NULL CHECK (amount >= 0),
+    type VARCHAR NOT NULL,
+    notes TEXT DEFAULT '',
+    expense_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+    user_id UUID NOT NULL
+);
+
+-- Create index for better query performance
+CREATE INDEX idx_expenses_goat_id ON public.expenses(goat_id);
+CREATE INDEX idx_expenses_user_id ON public.expenses(user_id);"uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "moddatetime";
 
