@@ -1,6 +1,17 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Create caretakers table first since it's referenced by goats
+CREATE TABLE IF NOT EXISTS public.caretakers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR NOT NULL,
+    phone VARCHAR,
+    location VARCHAR,
+    payment_terms VARCHAR,
+    user_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
+);
+
 CREATE TABLE IF NOT EXISTS public.goats (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tag_number VARCHAR NOT NULL,
@@ -15,8 +26,6 @@ CREATE TABLE IF NOT EXISTS public.goats (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
     UNIQUE(user_id, tag_number)
 );
-
-CREATE TABLE IF NOT EXISTS public.caretakers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR NOT NULL,
     phone VARCHAR,
@@ -71,22 +80,24 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
--- Create view for financial summaries with correct column names
+-- Create view for financial summaries
 CREATE OR REPLACE VIEW public.v_goat_financials AS
 WITH expense_totals AS (
-    SELECT goat_id, COALESCE(SUM(amount), 0) as total_expense
+    SELECT goat_id, COALESCE(SUM(amount), 0) as total_expenses
     FROM public.expenses
     GROUP BY goat_id
 )
 SELECT 
     g.id as goat_id,
-    g.tag_number as tag_number,
-    g.name as goat_name,
-    g.price,
+    g.tag_number,
+    g.name,
+    g.price as purchase_price,
     s.sale_price,
-    COALESCE(e.total_expense, 0) as total_expense,
+    COALESCE(e.total_expenses, 0) as expenses,
+    (COALESCE(s.sale_price, 0) - COALESCE(g.price, 0) - COALESCE(e.total_expenses, 0)) as profit,
     g.status,
-    g.created_at
+    g.created_at,
+    s.sale_date
 FROM public.goats g
 LEFT JOIN expense_totals e ON g.id = e.goat_id
 LEFT JOIN public.sales s ON g.id = s.goat_id;
@@ -123,3 +134,58 @@ CREATE POLICY "Users can manage their goats' caretakers"
 ON public.caretakers FOR ALL
 TO authenticated
 USING (user_id = auth.uid());
+
+-- Add policies for expenses
+CREATE POLICY "Users can view expenses for their goats"
+ON public.expenses FOR SELECT
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can manage expenses for their goats"
+ON public.expenses FOR ALL
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+-- Add policies for sales
+CREATE POLICY "Users can view sales for their goats"
+ON public.sales FOR SELECT
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can manage sales for their goats"
+ON public.sales FOR ALL
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+-- Add policies for weight logs
+CREATE POLICY "Users can view weight logs for their goats"
+ON public.weight_logs FOR SELECT
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can manage weight logs for their goats"
+ON public.weight_logs FOR ALL
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+-- Add policies for scans
+CREATE POLICY "Users can view scans for their goats"
+ON public.scans FOR SELECT
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can manage scans for their goats"
+ON public.scans FOR ALL
+TO authenticated
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+-- Add policies for notifications
+CREATE POLICY "Users can view their notifications"
+ON public.notifications FOR SELECT
+TO authenticated
+USING (record_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can manage their notifications"
+ON public.notifications FOR ALL
+TO authenticated
+USING (record_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
