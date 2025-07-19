@@ -1,4 +1,8 @@
--- Set up storage permissions
+-- Set up storage -- Drop existing policies
+DROP POLICY IF EXISTS "Authenticated users can upload goat photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view their goat photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their goat photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their goat photos" ON storage.objects;ons
 BEGIN;
 
 -- Switch to superuser role

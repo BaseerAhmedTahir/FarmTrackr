@@ -1,5 +1,9 @@
 -- Enable required extensions
-CREATE EXTENSION IF NO-- Drop and recreate expenses table
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "moddatetime";
+
+-- Drop and recreate expenses table
 DROP TABLE IF EXISTS public.expenses CASCADE;
 
 CREATE TABLE public.expenses (
@@ -72,9 +76,10 @@ CREATE TABLE public.expenses (
     goat_id UUID REFERENCES public.goats(id) ON DELETE CASCADE,
     amount DECIMAL(10,2) NOT NULL CHECK (amount >= 0),
     type VARCHAR NOT NULL,
-    notes TEXT,
+    notes TEXT DEFAULT '',
     expense_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
 -- Create index for better query performance
@@ -204,12 +209,20 @@ DROP POLICY IF EXISTS "Users can manage expenses for their goats" ON public.expe
 
 CREATE POLICY "Users can view expenses for their goats"
 ON public.expenses FOR SELECT TO authenticated
-USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+USING (user_id = auth.uid());
 
-CREATE POLICY "Users can manage expenses for their goats"
-ON public.expenses FOR ALL TO authenticated
-USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()))
-WITH CHECK (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+CREATE POLICY "Users can insert expenses"
+ON public.expenses FOR INSERT TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can update their expenses"
+ON public.expenses FOR UPDATE TO authenticated
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can delete their expenses"
+ON public.expenses FOR DELETE TO authenticated
+USING (user_id = auth.uid());
 
 -- Sales
 DROP POLICY IF EXISTS "Users can view sales for their goats" ON public.sales;
