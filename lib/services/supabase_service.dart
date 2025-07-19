@@ -152,38 +152,22 @@ abstract class Svc {
   }
 
   // Financial summary stream
-  static Stream<Map<String, dynamic>> financeSummary() {
-    return _client.from('v_goat_financials')
-      .select()
-      .asStream()
-      .map((rows) {
-        double invested = 0, sales = 0, exp = 0, profit = 0;
-        for (var r in rows) {
-          final price = r['price'];
-          final salePrice = r['sale_price'];
-          final totalExpense = r['total_expense'];
+  static Stream<Map<String, dynamic>> financeSummary() async* {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw Exception('User not authenticated');
+    }
 
-          final currentPrice = price != null ? (price as num).toDouble() : 0;
-          final currentSale = salePrice != null ? (salePrice as num).toDouble() : 0;
-          final currentExpense = totalExpense != null ? (totalExpense as num).toDouble() : 0;
-          
-          invested += currentPrice;
-          sales += currentSale;
-          exp += currentExpense;
-          
-          // Calculate profit: Sale Price - (Purchase Price + Expenses)
-          if (currentSale > 0) { // Only calculate profit for sold goats
-            profit += currentSale - (currentPrice + currentExpense);
-          }
-        }
-        return {
-          'invested': invested,
-          'sales': sales,
-          'expense': exp,
-          'profit': profit,
-          'count': rows.length
-        };
-      });
+    while (true) {
+      final response = await _client.rpc('get_financial_summary', params: {'user_id_param': userId});
+      yield {
+        'count': response['count'] ?? 0,
+        'invested': response['invested'] ?? 0,
+        'sales': response['sales'] ?? 0,
+        'profit': response['profit'] ?? 0,
+      };
+      await Future.delayed(const Duration(seconds: 5)); // Update every 5 seconds
+    }
   }
 
   // Add a caretaker
