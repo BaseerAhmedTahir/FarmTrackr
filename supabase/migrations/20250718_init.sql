@@ -74,7 +74,6 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
--- Create view for financial summaries
 CREATE OR REPLACE VIEW public.v_goat_financials AS
 WITH expense_totals AS (
     SELECT goat_id, COALESCE(SUM(amount), 0) as total_expense
@@ -83,7 +82,7 @@ WITH expense_totals AS (
 )
 SELECT 
     g.id as goat_id,
-    g.name,
+    g.tag_number as tag_number,
     g.price,
     s.sale_price,
     COALESCE(e.total_expense, 0) as total_expense,
@@ -92,9 +91,6 @@ SELECT
 FROM public.goats g
 LEFT JOIN expense_totals e ON g.id = e.goat_id
 LEFT JOIN public.sales s ON g.id = s.goat_id;
-
--- Rename view column
-ALTER VIEW public.v_goat_financials RENAME COLUMN name TO tag_number;
 
 -- Add RLS policies
 ALTER TABLE public.goats ENABLE ROW LEVEL SECURITY;
