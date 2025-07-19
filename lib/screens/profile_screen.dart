@@ -17,7 +17,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await Supabase.instance.client.auth.signOut();
       if (mounted) {
         // Pop the home screen and replace it with the auth screen
-        Navigator.pushNamedAndRemoveUntil(context, '/auth', (route) => false);
+        Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
       }
     } catch (e) {
       if (mounted) {

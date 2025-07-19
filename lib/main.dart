@@ -12,6 +12,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:goat_tracker/theme/app_theme.dart';
 import 'package:goat_tracker/screens/auth_screen.dart';
+import 'package:goat_tracker/screens/home_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,7 +43,12 @@ class MyApp extends ConsumerWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-      home: const AuthGate(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const AuthGate(),
+        '/auth': (context) => const AuthScreen(),
+        '/home': (context) => const HomeShell(),
+      },
     );
   }
 }
@@ -55,10 +61,31 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   @override
+  void initState() {
+    super.initState();
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (mounted) {
+        if (data.event == AuthChangeEvent.signedOut) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+        } else if (data.event == AuthChangeEvent.signedIn) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        }
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session != null) return const HomeShell();
-    return const AuthScreen();
+    return FutureBuilder(
+      future: Future.delayed(Duration.zero),
+      builder: (context, snapshot) {
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session != null) {
+          return const HomeShell();
+        }
+        return const AuthScreen();
+      },
+    );
   }
 }
 

@@ -50,6 +50,8 @@ abstract class Svc {
     }
   }
 
+  // For notification methods, use NotificationService from notification_service.dart
+
   // Stream caretakers table
   static Stream<List<Map<String, dynamic>>> caretakers() {
     return _client.from('caretakers')
@@ -115,10 +117,18 @@ abstract class Svc {
           final salePrice = r['sale_price'];
           final totalExpense = r['total_expense'];
 
-          invested += price != null ? (price as num).toDouble() : 0;
-          sales += salePrice != null ? (salePrice as num).toDouble() : 0;
-          exp += totalExpense != null ? (totalExpense as num).toDouble() : 0;
-          profit = sales - (invested + exp);
+          final currentPrice = price != null ? (price as num).toDouble() : 0;
+          final currentSale = salePrice != null ? (salePrice as num).toDouble() : 0;
+          final currentExpense = totalExpense != null ? (totalExpense as num).toDouble() : 0;
+          
+          invested += currentPrice;
+          sales += currentSale;
+          exp += currentExpense;
+          
+          // Calculate profit: Sale Price - (Purchase Price + Expenses)
+          if (currentSale > 0) { // Only calculate profit for sold goats
+            profit += currentSale - (currentPrice + currentExpense);
+          }
         }
         return {
           'invested': invested,

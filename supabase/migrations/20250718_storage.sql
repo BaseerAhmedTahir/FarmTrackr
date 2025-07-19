@@ -1,15 +1,13 @@
--- Set up storage -- Drop existing policies
+-- Set up storage
+BEGIN;
+
+-- Drop existing policies
 DROP POLICY IF EXISTS "Authenticated users can upload goat photos" ON storage.objects;
 DROP POLICY IF EXISTS "Users can view their goat photos" ON storage.objects;
 DROP POLICY IF EXISTS "Users can update their goat photos" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete their goat photos" ON storage.objects;ons
-BEGIN;
-
--- Switch to superuser role
-SET ROLE postgres;
-
+DROP POLICY IF EXISTS "Users can delete their goat photos" ON storage.objects;
 -- Create or update storage schema if needed
-CREATE SCHEMA IF NOT EXISTS storage AUTHORIZATION postgres;
+CREATE SCHEMA IF NOT EXISTS storage;
 
 -- Grant usage on storage schema
 GRANT USAGE ON SCHEMA storage TO postgres, authenticated, anon;

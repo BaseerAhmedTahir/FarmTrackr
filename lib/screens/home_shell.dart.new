@@ -38,7 +38,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       const CaretakerList(),
       const NotificationsScreen(),
       const ProfileScreen(),
-      SettingsScreen(),
+      const SettingsScreen(),
     ];
 
     return Scaffold(

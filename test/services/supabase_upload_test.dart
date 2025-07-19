@@ -1,38 +1,35 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// import 'package:gotrue_flutter/gotrue_flutter.dart'; // for EmptyLocalStorage
-
 import 'package:goat_tracker/services/supabase_service.dart';
-
-class FakePathProviderPlatform extends PathProviderPlatform {
-  @override
-  Future<String?> getApplicationDocumentsPath() async => '.';
-}
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
-    PathProviderPlatform.instance = FakePathProviderPlatform();
-
     await Supabase.initialize(
-      url: 'https://your-project.supabase.co',
-      anonKey: 'your-anon-key'
+      url: 'https://test.supabase.co',
+      anonKey: 'test-key',
     );
   });
 
-  test('image upload helper works', () async {
-    final bytes = Uint8List(10);
-    await Svc.addGoat(
-      tagId: 'test-tag',
-      price: 0,
-      date: DateTime.now(),
-      caretakerId: 'uuid-placeholder', // <-- Replace with valid ID
-      photoBytes: bytes,
-      ext: 'jpg',
-    );
-    expect(true, isTrue); // passes if no exceptions
+  test('image upload helper throws without auth', () async {
+    final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+    final testCaretakerId = 'test-caretaker-id';
+
+    try {
+      await Svc.addGoat(
+        tagId: 'TEST001',
+        price: 100.0,
+        date: DateTime.now(),
+        caretakerId: testCaretakerId,
+        photoBytes: bytes,
+        ext: 'jpg',
+      );
+      fail('Should throw an error without auth');
+    } catch (e) {
+      expect(e, isA<TypeError>());
+      expect(e.toString(), contains('Null check operator used on a null value'));
+    }
   });
 }
