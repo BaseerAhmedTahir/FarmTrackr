@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS "public"."caretakers" (
     "created_at" timestamp with time zone DEFAULT now(),
     "name" text NOT NULL,
     "phone" text,
+    "location" text,
+    "payment_terms" text,
     "user_id" uuid NOT NULL,
     CONSTRAINT "caretakers_pkey" PRIMARY KEY ("id")
 );
@@ -55,6 +57,8 @@ CREATE TABLE IF NOT EXISTS "public"."goats" (
     "status" text DEFAULT 'active'::text,
     "photo_url" text,
     "user_id" uuid NOT NULL,
+    "caretaker_id" uuid REFERENCES public.caretakers(id) ON DELETE SET NULL,
+    "price" numeric(10,2),
     CONSTRAINT "goats_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "goats_tag_number_key" UNIQUE ("tag_number")
 );
@@ -67,7 +71,7 @@ CREATE TABLE IF NOT EXISTS "public"."expenses" (
     "amount" numeric(10,2) NOT NULL,
     "description" text NOT NULL,
     "date" date NOT NULL,
-    "category" text NOT NULL,
+    "type" text NOT NULL,
     CONSTRAINT "expenses_pkey" PRIMARY KEY ("id")
 );
 
@@ -152,10 +156,26 @@ END $$;
 DO $$ 
 BEGIN
     -- Caretakers policies
-    CREATE POLICY "Users can access own caretakers" ON "public"."caretakers"
-        FOR ALL
+    CREATE POLICY "Enable insert for authenticated users" ON "public"."caretakers"
+        FOR INSERT
+        TO authenticated
+        WITH CHECK (auth.uid() = user_id);
+
+    CREATE POLICY "Enable select for users based on user_id" ON "public"."caretakers"
+        FOR SELECT
+        TO authenticated
+        USING (auth.uid() = user_id);
+
+    CREATE POLICY "Enable update for users based on user_id" ON "public"."caretakers"
+        FOR UPDATE
+        TO authenticated
         USING (auth.uid() = user_id)
         WITH CHECK (auth.uid() = user_id);
+
+    CREATE POLICY "Enable delete for users based on user_id" ON "public"."caretakers"
+        FOR DELETE
+        TO authenticated
+        USING (auth.uid() = user_id);
 
     -- Goats policies
     CREATE POLICY "Users can access own goats" ON "public"."goats"

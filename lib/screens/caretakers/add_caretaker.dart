@@ -11,6 +11,48 @@ class _AddCaretakerScreenState extends State<AddCaretakerScreen> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
+  final _location = TextEditingController();
+  final _paymentTerms = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _location.dispose();
+    _paymentTerms.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_form.currentState!.validate()) return;
+    
+    setState(() => _isLoading = true);
+    try {
+      await Svc.addCaretaker(
+        name: _name.text,
+        phone: _phone.text,
+        loc: _location.text,
+        payment: _paymentTerms.text,
+      );
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding caretaker: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,23 +65,56 @@ class _AddCaretakerScreenState extends State<AddCaretakerScreen> {
           child: Column(children: [
             TextFormField(
               controller: _name,
-              decoration: const InputDecoration(label: Text('Name')),
-              validator: (v) => v!.isEmpty ? 'required' : null,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                prefixIcon: Icon(Icons.person),
+              ),
+              validator: (v) => v!.isEmpty ? 'Name is required' : null,
+              textInputAction: TextInputAction.next,
             ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _phone,
-              decoration: const InputDecoration(label: Text('Phone (opt)')),
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixIcon: Icon(Icons.phone),
+              ),
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _location,
+              decoration: const InputDecoration(
+                labelText: 'Location',
+                prefixIcon: Icon(Icons.location_on),
+              ),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _paymentTerms,
+              decoration: const InputDecoration(
+                labelText: 'Payment Terms',
+                prefixIcon: Icon(Icons.payment),
+              ),
+              textInputAction: TextInputAction.done,
+              onEditingComplete: _save,
             ),
             const Spacer(),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.save),
-              label: const Text('Save'),
-              onPressed: () async {
-                if (!_form.currentState!.validate()) return;
-                await Svc.addCaretaker(name: _name.text, phone: _phone.text);
-                if (!mounted) return;
-                Navigator.pop(context);
-              },
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: _isLoading 
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+                label: const Text('Save Caretaker'),
+                onPressed: _isLoading ? null : _save,
+              ),
             )
           ]),
         ),

@@ -37,6 +37,9 @@ class _AuthScreenState extends State<AuthScreen> {
         
         if (response.user != null) {
           // Success! User is automatically signed in
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
           return;
         }
         throw const AuthException('Failed to create account');
@@ -46,7 +49,11 @@ class _AuthScreenState extends State<AuthScreen> {
           password: _passwordCtrl.text,
         );
         
-        if (response.user == null) {
+        if (response.user != null) {
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
+        } else {
           throw const AuthException('Invalid credentials');
         }
       }

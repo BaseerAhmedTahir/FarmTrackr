@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:goat_tracker/widgets/goat_photo.dart';
 import 'add_weight_dialog.dart';
 import 'weight_chart.dart';
 import 'scan_history.dart';
@@ -15,13 +16,26 @@ class GoatDetailsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Goat ${goat['tag_id']}'),
+        title: Text('Goat ${goat['tag_number'] ?? 'Unknown'}'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (goat['photo_url'] != null)
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: SizedBox(
+                  height: 300,
+                  width: double.infinity,
+                  child: GoatPhoto(
+                    photoPath: goat['photo_url'],
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -36,17 +50,29 @@ class GoatDetailsScreen extends ConsumerWidget {
                     ListTile(
                       leading: const Icon(Icons.tag),
                       title: const Text('Tag ID'),
-                      subtitle: Text(goat['tag_id']),
+                      subtitle: Text(goat['tag_number'] ?? 'Unknown'),
                     ),
+                    if (goat['caretakers'] != null)
+                      ListTile(
+                        leading: const Icon(Icons.person),
+                        title: const Text('Caretaker'),
+                        subtitle: Text(
+                          '${goat['caretakers']['name'] ?? 'Unknown'}\n'
+                          '${goat['caretakers']['phone'] ?? ''}\n'
+                          '${goat['caretakers']['location'] ?? ''}'
+                        ),
+                      ),
                     ListTile(
                       leading: const Icon(Icons.calendar_month),
-                      title: const Text('Purchase Date'),
-                      subtitle: Text(goat['purchase_date']),
+                      title: const Text('Birth Date'),
+                      subtitle: Text(goat['birth_date'] != null 
+                        ? DateTime.parse(goat['birth_date']).toLocal().toString().split(' ')[0]
+                        : 'Unknown'),
                     ),
                     ListTile(
                       leading: const Icon(Icons.attach_money),
                       title: const Text('Purchase Price'),
-                      subtitle: Text('₹${goat['purchase_price']}'),
+                      subtitle: Text('₹${goat['price'] ?? 0}'),
                     ),
                   ],
                 ),

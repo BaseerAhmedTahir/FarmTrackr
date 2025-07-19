@@ -2,8 +2,151 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-class Svc {
-  // EXPENSE
+abstract class Svc {
+  static final _client = Supabase.instance.client;
+  static final _bucket = _client.storage.from('goat-photos');
+
+  // Add a new goat with photo upload
+  static Future<void> addGoat({
+    required String tagId,
+    required double price,
+    required DateTime date,
+    required String caretakerId,
+    required Uint8List photoBytes,
+    required String ext,
+  }) async {
+    final userId = _client.auth.currentUser!.id;
+    final fileName = '$userId/${const Uuid().v4()}.$ext';
+    
+    try {
+      await _bucket.uploadBinary(
+        fileName,
+        photoBytes,
+        fileOptions: const FileOptions(
+          contentType: 'image/jpeg',
+          upsert: false,
+        ),
+      );
+      
+      // Store just the file path, not the full URL
+      final Map<String, dynamic> goatData = {
+        'tag_number': tagId,
+        'price': price,
+        'birth_date': date.toIso8601String(),
+        'photo_url': fileName, // Store only the file path
+        'caretaker_id': caretakerId,
+        'user_id': userId,
+        'name': 'Goat #$tagId',
+        'gender': 'unknown',
+        'status': 'active',
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      
+      await _client.from('goats').insert(goatData);
+    } on StorageException catch (e) {
+      throw Exception('Failed to upload photo: ${e.message}');
+    } catch (e) {
+      throw Exception('Failed to add goat: $e');
+    }
+  }
+
+  // Stream caretakers table
+  static Stream<List<Map<String, dynamic>>> caretakers() {
+    return _client.from('caretakers')
+      .select()
+      .order('name')
+      .asStream();
+  }
+
+  // Stream goats table
+  static Stream<List<Map<String, dynamic>>> goats() {
+    return _client.from('goats')
+      .select('''
+        *,
+        caretakers (
+          name,
+          phone,
+          location,
+          payment_terms
+        )
+      ''')
+      .order('birth_date', ascending: false)
+      .asStream();
+  }
+
+  // Get finance data for CSV export
+  static Future<List<Map<String, dynamic>>> getFinanceData() {
+    return _client.from('v_goat_financials').select();
+  }
+
+  // Get expense summary by category
+  static Stream<List<Map<String, dynamic>>> expenseSummary() {
+    return _client.from('expenses')
+      .select('type, amount')
+      .asStream()
+      .map((data) {
+        final Map<String, Map<String, dynamic>> summary = {};
+        for (final expense in data) {
+          final type = expense['type'] as String? ?? 'Other';
+          final amount = expense['amount'] != null ? (expense['amount'] as num).toDouble() : 0.0;
+          if (!summary.containsKey(type)) {
+            summary[type] = {'total': 0.0, 'count': 0};
+          }
+          summary[type]!['total'] = (summary[type]!['total'] as double) + amount;
+          summary[type]!['count'] = (summary[type]!['count'] as int) + 1;
+        }
+        return summary.entries.map((e) => {
+          'type': e.key,
+          'total': e.value['total'],
+          'count': e.value['count']
+        }).toList();
+      });
+  }
+
+  // Financial summary stream
+  static Stream<Map<String, dynamic>> financeSummary() {
+    return _client.from('v_goat_financials')
+      .select()
+      .asStream()
+      .map((rows) {
+        double invested = 0, sales = 0, exp = 0, profit = 0;
+        for (var r in rows) {
+          final price = r['price'];
+          final salePrice = r['sale_price'];
+          final totalExpense = r['total_expense'];
+
+          invested += price != null ? (price as num).toDouble() : 0;
+          sales += salePrice != null ? (salePrice as num).toDouble() : 0;
+          exp += totalExpense != null ? (totalExpense as num).toDouble() : 0;
+          profit = sales - (invested + exp);
+        }
+        return {
+          'invested': invested,
+          'sales': sales,
+          'expense': exp,
+          'profit': profit,
+          'count': rows.length
+        };
+      });
+  }
+
+  // Add a caretaker
+  static Future<void> addCaretaker({
+    required String name,
+    String? phone,
+    String? loc,
+    String? payment,
+  }) async {
+    await _client.from('caretakers').insert({
+      'name': name,
+      'phone': phone,
+      'location': loc,
+      'payment_terms': payment,
+      'user_id': _client.auth.currentUser!.id,
+    });
+  }
+
+  // Add an expense
   static Future<void> addExpense({
     required String goatId,
     required double amt,
@@ -20,7 +163,6 @@ class Svc {
         'expense_date': (date ?? DateTime.now()).toIso8601String(),
       }).select().single();
     
-      // Create notification directly in the notifications table
       await _client.from('notifications').insert({
         'message': 'New expense of ₹$amt added for goat $goatId',
         'type': 'expense',
@@ -33,19 +175,17 @@ class Svc {
     }
   }
 
-  // SALE
+  // Sell a goat
   static Future<void> sellGoat(String id, double price) async {
     try {
       final record = await _client.from('sales').insert({
         'goat_id': id,
         'sale_price': price,
         'sale_date': DateTime.now().toIso8601String(),
-        'payment_mode': 'cash'
       }).select().single();
 
-      await _client.from('goats').update({'is_sold': true}).eq('id', id);
+      await _client.from('goats').update({'status': 'sold'}).eq('id', id);
 
-      // Create notification directly in the notifications table
       await _client.from('notifications').insert({
         'message': 'Goat $id was sold for ₹$price',
         'type': 'sale',
@@ -58,163 +198,56 @@ class Svc {
     }
   }
 
-  // FINANCIAL SUMMARY STREAM
-  static Stream<Map<String, dynamic>> financeSummary() => _client
-      .from('v_goat_financials')
-      .select()
-      .asStream()
-      .map((rows) {
-        double invested = 0, sales = 0, exp = 0, profit = 0;
-        for (var r in rows) {
-          invested += (r['purchase_price'] as num).toDouble();
-          sales    += (r['sale_price'] ?? 0) as double;
-          exp      += (r['total_expense'] as num).toDouble();
-          profit   += (r['net_profit'] as num).toDouble();
-        }
-        return {
-          'invested': invested,
-          'sales': sales,
-          'expense': exp,
-          'profit': profit,
-          'count': rows.length
-        };
-      });
-  static final _client = Supabase.instance.client;
-  static final _bucket = _client.storage.from('goat-photos');
-
-  // Add a new caretaker
-  static Future<void> addCaretaker({
-    required String name,
-    String? phone,
-    String? loc,
-    String? payment,
-  }) =>
-    _client.from('caretakers').insert({
-      'name': name,
-      'phone': phone,
-      'location': loc,
-      'payment_terms': payment,
-    });
-
-  // Add a new goat with photo upload
-  static Future<void> addGoat({
-    required String tagId,
-    required double price,
-    required DateTime date,
-    required String caretakerId,
-    required Uint8List photoBytes,
-    required String ext,
-  }) async {
-    final fileName = '${const Uuid().v4()}.$ext';
-    await _bucket.uploadBinary(
-      fileName,
-      photoBytes,
-      fileOptions: FileOptions(contentType: 'image/$ext'),
-    );
-    final publicUrl = _bucket.getPublicUrl(fileName);
-
-    await _client.from('goats').insert({
-      'tag_id': tagId,
-      'purchase_price': price,
-      'purchase_date': date.toIso8601String(),
-      'photo_url': publicUrl,
-      'caretaker_id': caretakerId,
+  // Weight tracking methods
+  static Future<void> addWeight(String goatId, double kg) async {
+    await _client.from('weight_logs').insert({
+      'goat_id': goatId,
+      'weight': kg,
+      'date': DateTime.now().toIso8601String(),
     });
   }
 
-  // Stream caretakers table
-  static Stream<List<Map<String, dynamic>>> caretakers() =>
-    _client.from('caretakers')
-      .select()
-      .order('name')
-      .asStream();
-
-  // Stream goats table
-  static Stream<List<Map<String, dynamic>>> goats() =>
-    _client.from('goats')
-      .select('*, caretakers!inner(name)')
-      .order('created_at')
-      .asStream();
-
-  // Get finance data for CSV export
-  static Future<List<Map<String, dynamic>>> getFinanceData() =>
-    _client.from('v_goat_financials').select();
-
-  // Get expense summary by category
-  static Stream<List<Map<String, dynamic>>> expenseSummary() =>
-    _client.from('expenses')
-      .select('type, amount')
-      .asStream()
-      .map((data) {
-        final Map<String, dynamic> summary = {};
-        for (final expense in data) {
-          final type = expense['type'] as String;
-          final amount = (expense['amount'] as num).toDouble();
-          if (!summary.containsKey(type)) {
-            summary[type] = {'total': 0.0, 'count': 0};
-          }
-          summary[type]['total'] += amount;
-          summary[type]['count']++;
-        }
-        return summary.entries.map((e) => {
-          'type': e.key,
-          'total': e.value['total'],
-          'count': e.value['count']
-        }).toList();
-      });
-
-  // Notification methods
-  static Stream<List<Map<String, dynamic>>> notificationStream() =>
-    _client.from('notifications')
-      .select()
-      .order('created_at', ascending: false)
-      .limit(50)
-      .asStream();
-
-  static Future<void> markNotificationAsRead(String id) =>
-    _client.from('notifications')
-      .update({'read': true})
-      .eq('id', id);
-
-  static Future<void> deleteNotification(String id) =>
-    _client.from('notifications')
-      .delete()
-      .eq('id', id);
-
-  // Weight tracking methods
-  static Future<void> addWeight(String goatId, double kg) =>
-    _client.from('weight_logs').insert({
-      'goat_id': goatId,
-      'weight_kg': kg,
-      'recorded_at': DateTime.now().toIso8601String()
-    });
-
-  static Stream<List<Map<String, dynamic>>> weightStream(String goatId) =>
-    _client.from('weight_logs')
+  static Stream<List<Map<String, dynamic>>> weightStream(String goatId) {
+    return _client.from('weight_logs')
       .select()
       .eq('goat_id', goatId)
-      .order('recorded_at')
+      .order('date')
       .asStream();
-      
+  }
+
   // QR/NFC scan methods
   static Future<void> addScan({
     required String goatId,
     required String scanType,
     required String location,
     String? notes
-  }) =>
-    _client.from('scans').insert({
+  }) async {
+    await _client.from('scans').insert({
       'goat_id': goatId,
       'scan_type': scanType,
       'location': location,
       'notes': notes,
       'scanned_at': DateTime.now().toIso8601String()
     });
+  }
 
-  static Stream<List<Map<String, dynamic>>> scanHistory(String goatId) =>
-    _client.from('scans')
+  static Stream<List<Map<String, dynamic>>> scanHistory(String goatId) {
+    return _client.from('scans')
       .select()
       .eq('goat_id', goatId)
       .order('scanned_at', ascending: false)
       .asStream();
+  }
+
+  // Helper method to get a signed URL for a photo
+  static Future<String> getSignedUrl(String? fileName) async {
+    if (fileName == null) return '';
+    try {
+      final signedUrl = await _bucket.createSignedUrl(fileName, 3600); // 1 hour expiry
+      return signedUrl;
+    } catch (e) {
+      print('Error getting signed URL: $e');
+      return '';
+    }
+  }
 }

@@ -54,10 +54,15 @@ class AuthService {
     AuthException? lastError;
     for (int i = 0; i < _maxRetries; i++) {
       try {
-        return await Supabase.instance.client.auth.signInWithPassword(
+        final response = await Supabase.instance.client.auth.signInWithPassword(
           email: email,
           password: password,
         );
+        // Ensure the session is properly initialized
+        if (response.session != null) {
+          await Supabase.instance.client.auth.setSession(response.session!.refreshToken!);
+        }
+        return response;
       } on AuthException catch (e) {
         lastError = e;
         if (e.statusCode == 429) {
@@ -70,4 +75,15 @@ class AuthService {
     }
     throw lastError ?? const AuthException('Failed to sign in after multiple attempts');
   }
+
+  static Future<void> signOut() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      throw AuthException('Failed to sign out: ${e.toString()}');
+    }
+  }
+
+  static bool get isAuthenticated => 
+    Supabase.instance.client.auth.currentSession != null;
 }

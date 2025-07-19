@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:goat_tracker/services/supabase_service.dart';
 import 'package:goat_tracker/screens/expenses/add_expense.dart';
 import 'package:goat_tracker/screens/sales/sell_goat.dart';
+import 'package:goat_tracker/widgets/goat_photo.dart';
 import 'goat_details_screen.dart';
 
 class GoatListScreen extends StatelessWidget {
@@ -49,13 +50,14 @@ class GoatListScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        child: g['photo_url'] != null
-                          ? Image.network(g['photo_url'], fit: BoxFit.cover)
-                          : const Icon(Icons.image_not_supported, size: 48),
+                        child: GoatPhoto(
+                          photoPath: g['photo_url'],
+                          fit: BoxFit.cover,
+                        ),
                       ),
                       ListTile(
-                        title: Text(g['tag_id'] ?? ''),
-                        subtitle: Text('₹${g['purchase_price']} • $caretakerName'),
+                        title: Text(g['tag_number'] ?? ''),
+                        subtitle: Text('₹${g['price']} • $caretakerName'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

@@ -81,7 +81,7 @@ class WeightChart extends StatelessWidget {
 
     return StreamBuilder(
       stream: Svc.weightStream(goatId),
-      builder: (context, snapshot) {
+      builder: (context, AsyncSnapshot<List<Map<String, dynamic>>> snapshot) {
         if (!snapshot.hasData) {
           return Center(
             child: CircularProgressIndicator(
@@ -114,9 +114,9 @@ class WeightChart extends StatelessWidget {
         }
 
         // Convert data to chart points with dates
-        final weightData = weights.map((w) => (
-          date: DateTime.parse(w['recorded_at']),
-          weight: (w['weight_kg'] as num).toDouble(),
+        final weightData = weights.map((Map<String, dynamic> w) => (
+          date: DateTime.parse(w['date'] as String),
+          weight: (w['weight'] as num).toDouble(),
         )).toList();
         
         final spots = weightData.asMap().entries.map((e) {

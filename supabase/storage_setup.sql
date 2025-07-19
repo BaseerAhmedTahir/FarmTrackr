@@ -1,48 +1,34 @@
--- This migration needs to be run as storage admin
-BEGIN;
+-- Storage Setup Instructions
+/*
+These storage settings need to be configured through the Supabase Dashboard UI:
 
--- Storage setup
-DO $$ 
-BEGIN
-    -- Create storage bucket for goat photos if it doesn't exist
-    INSERT INTO storage.buckets (id, name, public)
-    VALUES ('goat-photos', 'goat-photos', false)
-    ON CONFLICT (id) DO NOTHING;
+1. Create a new bucket:
+   - Name: goat-photos
+   - Public bucket: No
 
-    -- Enable RLS for storage
-    ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+2. Add the following RLS policies for the goat-photos bucket:
 
-    -- Drop existing policies if they exist
-    DROP POLICY IF EXISTS "Users can upload goat photos" ON storage.objects;
-    DROP POLICY IF EXISTS "Users can access own goat photos" ON storage.objects;
-    DROP POLICY IF EXISTS "Users can update own goat photos" ON storage.objects;
-    DROP POLICY IF EXISTS "Users can delete own goat photos" ON storage.objects;
+Policy 1: Upload photos
+- Policy name: Users can upload goat photos
+- Allowed operation: INSERT
+- Policy definition: true
+- Target roles: authenticated
 
-    -- Create storage policies
-    CREATE POLICY "Users can upload goat photos" ON storage.objects
-        FOR INSERT
-        TO authenticated
-        WITH CHECK (bucket_id = 'goat-photos' AND (storage.foldername(name))[1] = auth.uid()::text);
+Policy 2: View photos
+- Policy name: Users can access goat photos
+- Allowed operation: SELECT
+- Policy definition: true
+- Target roles: authenticated
 
-    CREATE POLICY "Users can access own goat photos" ON storage.objects
-        FOR SELECT
-        TO authenticated
-        USING (bucket_id = 'goat-photos' AND (storage.foldername(name))[1] = auth.uid()::text);
+Policy 3: Update photos
+- Policy name: Users can update goat photos
+- Allowed operation: UPDATE
+- Policy definition: true
+- Target roles: authenticated
 
-    CREATE POLICY "Users can update own goat photos" ON storage.objects
-        FOR UPDATE
-        TO authenticated
-        USING (bucket_id = 'goat-photos' AND (storage.foldername(name))[1] = auth.uid()::text)
-        WITH CHECK (bucket_id = 'goat-photos' AND (storage.foldername(name))[1] = auth.uid()::text);
-
-    CREATE POLICY "Users can delete own goat photos" ON storage.objects
-        FOR DELETE
-        TO authenticated
-        USING (bucket_id = 'goat-photos' AND (storage.foldername(name))[1] = auth.uid()::text);
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE NOTICE 'Error setting up storage: %', SQLERRM;
-        RAISE;
-END $$;
-
-COMMIT;
+Policy 4: Delete photos
+- Policy name: Users can delete goat photos
+- Allowed operation: DELETE
+- Policy definition: true
+- Target roles: authenticated
+*/
