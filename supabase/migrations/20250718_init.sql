@@ -1,5 +1,12 @@
 
+-- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "moddatetime";
+
+-- Create enum types for status values
+CREATE TYPE public.goat_status AS ENUM ('active', 'sold', 'deceased');
+CREATE TYPE public.goat_gender AS ENUM ('male', 'female', 'unknown');
 
 -- Create caretakers table first since it's referenced by goats
 CREATE TABLE IF NOT EXISTS public.caretakers (
@@ -12,27 +19,20 @@ CREATE TABLE IF NOT EXISTS public.caretakers (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
+-- Create goats table with proper foreign key and constraints
 CREATE TABLE IF NOT EXISTS public.goats (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tag_number VARCHAR NOT NULL,
     name VARCHAR NOT NULL,
     birth_date TIMESTAMP WITH TIME ZONE,
-    price DECIMAL(10,2),
+    price DECIMAL(10,2) CHECK (price >= 0),
     photo_url TEXT,
-    gender VARCHAR DEFAULT 'unknown',
-    status VARCHAR DEFAULT 'active',
-    caretaker_id UUID REFERENCES public.caretakers(id),
+    gender goat_gender DEFAULT 'unknown',
+    status goat_status DEFAULT 'active',
+    caretaker_id UUID REFERENCES public.caretakers(id) ON DELETE SET NULL,
     user_id UUID NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
     UNIQUE(user_id, tag_number)
-);
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR NOT NULL,
-    phone VARCHAR,
-    location VARCHAR,
-    payment_terms VARCHAR,
-    user_id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
 CREATE TABLE IF NOT EXISTS public.expenses (
@@ -80,12 +80,23 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
--- Create view for financial summaries
-CREATE OR REPLACE VIEW public.v_goat_financials AS
+-- Drop view if exists to handle dependencies
+DROP VIEW IF EXISTS public.v_goat_financials;
+
+-- Create materialized view for better performance with financial calculations
+CREATE MATERIALIZED VIEW public.v_goat_financials AS
 WITH expense_totals AS (
     SELECT goat_id, COALESCE(SUM(amount), 0) as total_expenses
     FROM public.expenses
     GROUP BY goat_id
+),
+latest_sale AS (
+    SELECT DISTINCT ON (goat_id) 
+        goat_id,
+        sale_price,
+        sale_date
+    FROM public.sales
+    ORDER BY goat_id, sale_date DESC
 )
 SELECT 
     g.id as goat_id,
@@ -95,12 +106,24 @@ SELECT
     s.sale_price,
     COALESCE(e.total_expenses, 0) as expenses,
     (COALESCE(s.sale_price, 0) - COALESCE(g.price, 0) - COALESCE(e.total_expenses, 0)) as profit,
-    g.status,
+    g.status::text,
     g.created_at,
     s.sale_date
 FROM public.goats g
 LEFT JOIN expense_totals e ON g.id = e.goat_id
-LEFT JOIN public.sales s ON g.id = s.goat_id;
+LEFT JOIN latest_sale s ON g.id = s.goat_id;
+
+-- Create index on materialized view for better query performance
+CREATE UNIQUE INDEX IF NOT EXISTS idx_goat_financials_goat_id ON public.v_goat_financials (goat_id);
+
+-- Create function to refresh materialized view
+CREATE OR REPLACE FUNCTION refresh_goat_financials()
+RETURNS TRIGGER AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY public.v_goat_financials;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
 
 ALTER TABLE public.goats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.caretakers ENABLE ROW LEVEL SECURITY;
@@ -133,7 +156,24 @@ USING (user_id = auth.uid());
 CREATE POLICY "Users can manage their goats' caretakers"
 ON public.caretakers FOR ALL
 TO authenticated
-USING (user_id = auth.uid());
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+
+-- Create triggers for materialized view refresh
+CREATE TRIGGER refresh_financials_on_expense
+    AFTER INSERT OR UPDATE OR DELETE ON public.expenses
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION refresh_goat_financials();
+
+CREATE TRIGGER refresh_financials_on_sale
+    AFTER INSERT OR UPDATE OR DELETE ON public.sales
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION refresh_goat_financials();
+
+CREATE TRIGGER refresh_financials_on_goat
+    AFTER INSERT OR UPDATE OR DELETE ON public.goats
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION refresh_goat_financials();
 
 -- Add policies for expenses
 CREATE POLICY "Users can view expenses for their goats"
@@ -144,7 +184,8 @@ USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
 CREATE POLICY "Users can manage expenses for their goats"
 ON public.expenses FOR ALL
 TO authenticated
-USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()))
+WITH CHECK (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
 
 -- Add policies for sales
 CREATE POLICY "Users can view sales for their goats"
