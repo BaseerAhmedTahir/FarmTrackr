@@ -14,14 +14,12 @@ CREATE TABLE public.expenses (
     notes TEXT DEFAULT '',
     expense_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
-    user_id UUID NOT NULL
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL
 );
 
 -- Create index for better query performance
 CREATE INDEX idx_expenses_goat_id ON public.expenses(goat_id);
-CREATE INDEX idx_expenses_user_id ON public.expenses(user_id);"uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "moddatetime";
+CREATE INDEX idx_expenses_user_id ON public.expenses(user_id);
 
 -- Create storage bucket for goat photos
 INSERT INTO storage.buckets (id, name, public, avif_autodetection, file_size_limit, allowed_mime_types)
