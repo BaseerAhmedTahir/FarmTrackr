@@ -8,7 +8,6 @@ class AppTheme {
       primary: Colors.green.shade600,
       secondary: Colors.teal.shade600,
       surface: Colors.white,
-      background: Colors.grey.shade50,
       onSurface: Colors.black87,
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
@@ -29,7 +28,6 @@ class AppTheme {
       primary: Colors.green.shade400,
       secondary: Colors.teal.shade400,
       surface: Colors.grey.shade900,
-      background: Colors.black87,
       onSurface: Colors.white,
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(

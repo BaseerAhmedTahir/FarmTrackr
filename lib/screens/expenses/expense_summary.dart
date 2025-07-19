@@ -48,11 +48,15 @@ class ExpenseSummaryScreen extends ConsumerWidget {
                       ),
                       Metric(
                         'Average Monthly',
-                        '₹${(data.fold<double>(0, (sum, e) => sum + e.amount) / data.length).toStringAsFixed(2)}',
+                        data.isEmpty 
+                            ? '₹0.00'
+                            : '₹${(data.fold<double>(0, (sum, e) => sum + e.amount) / data.length).toStringAsFixed(2)}',
                       ),
                       Metric(
                         'Highest Month',
-                        '${data.reduce((a, b) => a.amount > b.amount ? a : b).month}',
+                        data.isEmpty 
+                            ? 'No data'
+                            : '${data.reduce((a, b) => a.amount > b.amount ? a : b).month}',
                       ),
                     ],
                   ),

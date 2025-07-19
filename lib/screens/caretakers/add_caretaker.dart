@@ -13,6 +13,7 @@ class _AddCaretakerScreenState extends State<AddCaretakerScreen> {
   final _phone = TextEditingController();
   final _location = TextEditingController();
   final _paymentTerms = TextEditingController();
+  final _profitShare = TextEditingController(text: '0');
   bool _isLoading = false;
 
   @override
@@ -21,6 +22,7 @@ class _AddCaretakerScreenState extends State<AddCaretakerScreen> {
     _phone.dispose();
     _location.dispose();
     _paymentTerms.dispose();
+    _profitShare.dispose();
     super.dispose();
   }
 
@@ -34,6 +36,7 @@ class _AddCaretakerScreenState extends State<AddCaretakerScreen> {
         phone: _phone.text,
         loc: _location.text,
         payment: _paymentTerms.text,
+        profitShare: double.tryParse(_profitShare.text) ?? 0,
       );
       if (mounted) {
         Navigator.pop(context);
@@ -98,6 +101,23 @@ class _AddCaretakerScreenState extends State<AddCaretakerScreen> {
                 labelText: 'Payment Terms',
                 prefixIcon: Icon(Icons.payment),
               ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _profitShare,
+              decoration: const InputDecoration(
+                labelText: 'Profit Share (%)',
+                prefixIcon: Icon(Icons.percent),
+                hintText: 'Enter percentage (0-100)',
+              ),
+              keyboardType: TextInputType.number,
+              validator: (v) {
+                if (v == null || v.isEmpty) return null;
+                final number = double.tryParse(v);
+                if (number == null) return 'Please enter a valid number';
+                if (number < 0 || number > 100) return 'Please enter a value between 0 and 100';
+                return null;
+              },
               textInputAction: TextInputAction.done,
               onEditingComplete: _save,
             ),

@@ -134,7 +134,7 @@ class SettingsService {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        labelTextStyle: MaterialStateProperty.all(
+        labelTextStyle: WidgetStateProperty.all(
           theme.textTheme.labelMedium,
         ),
         elevation: 3,
@@ -160,7 +160,7 @@ class SettingsService {
           borderRadius: BorderRadius.circular(12),
         ),
         filled: true,
-        fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
       ),
     );
   }

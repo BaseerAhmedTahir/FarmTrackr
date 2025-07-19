@@ -86,14 +86,14 @@ abstract class Svc {
   // Get expense summary by month
   static Stream<List<ExpenseSummary>> expenseSummary() {
     return _client.from('expenses')
-      .select('date, amount')
-      .order('date')
+      .select('expense_date, amount')
+      .order('expense_date')
       .asStream()
       .map((data) {
         final Map<String, double> monthlySummary = {};
         
         for (var expense in data) {
-          final date = DateTime.parse(expense['date']);
+          final date = DateTime.parse(expense['expense_date']);
           final month = '${date.year}-${date.month.toString().padLeft(2, '0')}';
           final amount = expense['amount'].toDouble();
           
@@ -138,11 +138,13 @@ abstract class Svc {
           summaries.add({
             'id': row['id'] as String,
             'name': row['name'] as String,
-            'goat_count': row['goat_count'] as int,
+            'phone': row['phone'] as String?,
+            'location': row['location'] as String?,
+            'profit_share': (row['profit_share'] as num?)?.toDouble() ?? 0,
+            'total_goats': (row['total_goats'] as int?) ?? 0,
             'total_investment': (row['total_investment'] as num?)?.toDouble() ?? 0,
             'total_expenses': (row['total_expenses'] as num?)?.toDouble() ?? 0,
-            'total_sales': (row['total_sales'] as num?)?.toDouble() ?? 0,
-            'profit_share': (row['profit_share'] as num?)?.toDouble() ?? 0,
+            'profit_share_amount': (row['profit_share_amount'] as num?)?.toDouble() ?? 0,
           });
         }
         return summaries;
@@ -190,12 +192,14 @@ abstract class Svc {
     String? phone,
     String? loc,
     String? payment,
+    double profitShare = 0,
   }) async {
     await _client.from('caretakers').insert({
       'name': name,
       'phone': phone,
       'location': loc,
       'payment_terms': payment,
+      'profit_share': profitShare,
       'user_id': _client.auth.currentUser!.id,
     });
   }
@@ -209,12 +213,19 @@ abstract class Svc {
     DateTime? date,
   }) async {
     try {
+      // Get current user ID
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
       final record = await _client.from('expenses').insert({
         'goat_id': goatId,
         'amount': amt,
         'type': type,
         'notes': notes,
         'expense_date': (date ?? DateTime.now()).toIso8601String(),
+        'user_id': userId,
       }).select().single();
     
       await _client.from('notifications').insert({
@@ -222,7 +233,8 @@ abstract class Svc {
         'type': 'expense',
         'record_id': record['id'],
         'read': false,
-        'created_at': DateTime.now().toIso8601String()
+        'created_at': DateTime.now().toIso8601String(),
+        'user_id': userId
       });
     } catch (e) {
       throw Exception('Failed to add expense: $e');
@@ -232,11 +244,18 @@ abstract class Svc {
   // Sell a goat
   static Future<void> sellGoat(String id, double price, {String? buyerInfo}) async {
     try {
+      // Get current user ID
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
       final record = await _client.from('sales').insert({
         'goat_id': id,
         'sale_price': price,
         'sale_date': DateTime.now().toIso8601String(),
         'buyer_info': buyerInfo,
+        'user_id': userId
       }).select().single();
 
       await _client.from('goats').update({'status': 'sold'}).eq('id', id);

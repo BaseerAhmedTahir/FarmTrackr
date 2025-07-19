@@ -1,34 +1,56 @@
--- Storage Setup Instructions
-/*
-These storage settings need to be configured through the Supabase Dashboard UI:
+-- Storage setup for goat photos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('goat-photos', 'goat-photos', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 
-1. Create a new bucket:
-   - Name: goat-photos
-   - Public bucket: No
+-- Enable RLS on the bucket
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
-2. Add the following RLS policies for the goat-photos bucket:
+-- Create policies for storage
+DROP POLICY IF EXISTS "Allow authenticated users to view photos" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated users to upload photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own photos" ON storage.objects;
 
-Policy 1: Upload photos
-- Policy name: Users can upload goat photos
-- Allowed operation: INSERT
-- Policy definition: true
-- Target roles: authenticated
+-- Policy to allow authenticated users to view photos in their bucket
+CREATE POLICY "Allow authenticated users to view photos"
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'goat-photos' AND
+  auth.uid()::text = (storage.foldername(name))[1]
+);
 
-Policy 2: View photos
-- Policy name: Users can access goat photos
-- Allowed operation: SELECT
-- Policy definition: true
-- Target roles: authenticated
+-- Policy to allow authenticated users to upload photos to their folder
+CREATE POLICY "Allow authenticated users to upload photos"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'goat-photos' AND
+  auth.uid()::text = (storage.foldername(name))[1]
+);
 
-Policy 3: Update photos
-- Policy name: Users can update goat photos
-- Allowed operation: UPDATE
-- Policy definition: true
-- Target roles: authenticated
+-- Create RLS policies for object ownership
+CREATE POLICY "Users can update their own photos"
+ON storage.objects
+FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'goat-photos' AND
+  auth.uid()::text = (storage.foldername(name))[1]
+)
+WITH CHECK (
+  bucket_id = 'goat-photos' AND
+  auth.uid()::text = (storage.foldername(name))[1]
+);
 
-Policy 4: Delete photos
-- Policy name: Users can delete goat photos
-- Allowed operation: DELETE
-- Policy definition: true
-- Target roles: authenticated
-*/
+CREATE POLICY "Users can delete their own photos"
+ON storage.objects
+FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'goat-photos' AND
+  auth.uid()::text = (storage.foldername(name))[1]
+);

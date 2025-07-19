@@ -28,7 +28,9 @@ class ChartCard extends StatelessWidget {
             const SizedBox(height: 16),
             SizedBox(
               height: 200,
-              child: BarChart(
+              child: data.isEmpty
+                  ? const Center(child: Text('No expense data available'))
+                  : BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
                   maxY: data.map((e) => e.amount).reduce((a, b) => a > b ? a : b) * 1.2,

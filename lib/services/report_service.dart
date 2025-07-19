@@ -143,7 +143,7 @@ class ReportService {
                     ...expenses.map((e) => [
                       e['type'] ?? 'Other',
                       (e['total_expense'] ?? 0).toString(),
-                    ]).toList(),
+                    ]),
                   ],
                 ),
               ],
