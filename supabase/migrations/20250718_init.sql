@@ -3,6 +3,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "moddatetime";
 
+-- Create storage bucket for goat photos
+INSERT INTO storage.buckets (id, name, public, avif_autodetection, file_size_limit, allowed_mime_types)
+VALUES ('goat-photos', 'goat-photos', true, false, 52428800, '{"image/jpeg","image/png","image/webp"}')
+ON CONFLICT (id) DO UPDATE SET
+    public = EXCLUDED.public,
+    file_size_limit = EXCLUDED.file_size_limit,
+    allowed_mime_types = EXCLUDED.allowed_mime_types;
+
 -- Create enum types
 DO $$ BEGIN
     CREATE TYPE public.goat_status AS ENUM ('active', 'sold', 'deceased');
@@ -40,7 +48,10 @@ CREATE TABLE IF NOT EXISTS public.goats (
 );
 
 -- Other related tables
-CREATE TABLE IF NOT EXISTS public.expenses (
+-- Drop and recreate expenses table to ensure clean schema
+DROP TABLE IF EXISTS public.expenses CASCADE;
+
+CREATE TABLE public.expenses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     goat_id UUID REFERENCES public.goats(id) ON DELETE CASCADE,
     amount DECIMAL(10,2) NOT NULL CHECK (amount >= 0),
@@ -49,6 +60,10 @@ CREATE TABLE IF NOT EXISTS public.expenses (
     expense_date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
+
+-- Create index for better query performance
+CREATE INDEX idx_expenses_goat_id ON public.expenses(goat_id);
+CREATE INDEX idx_expenses_expense_date ON public.expenses(expense_date);
 
 CREATE TABLE IF NOT EXISTS public.sales (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
