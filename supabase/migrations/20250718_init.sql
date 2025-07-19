@@ -1,9 +1,6 @@
--- Create tables for goat tracking application
 
--- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create tables with UUID primary keys
 CREATE TABLE IF NOT EXISTS public.goats (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tag_number VARCHAR NOT NULL,
@@ -74,6 +71,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
+-- Create view for financial summaries with correct column names
 CREATE OR REPLACE VIEW public.v_goat_financials AS
 WITH expense_totals AS (
     SELECT goat_id, COALESCE(SUM(amount), 0) as total_expense
@@ -83,6 +81,7 @@ WITH expense_totals AS (
 SELECT 
     g.id as goat_id,
     g.tag_number as tag_number,
+    g.name as goat_name,
     g.price,
     s.sale_price,
     COALESCE(e.total_expense, 0) as total_expense,
@@ -92,7 +91,6 @@ FROM public.goats g
 LEFT JOIN expense_totals e ON g.id = e.goat_id
 LEFT JOIN public.sales s ON g.id = s.goat_id;
 
--- Add RLS policies
 ALTER TABLE public.goats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.caretakers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
@@ -101,7 +99,6 @@ ALTER TABLE public.weight_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Create policies
 CREATE POLICY "Users can view their own goats"
 ON public.goats FOR SELECT
 TO authenticated
@@ -117,7 +114,6 @@ ON public.goats FOR UPDATE
 TO authenticated
 USING (user_id = auth.uid());
 
--- Similar policies for other tables...
 CREATE POLICY "Users can view their goats' caretakers"
 ON public.caretakers FOR SELECT
 TO authenticated
