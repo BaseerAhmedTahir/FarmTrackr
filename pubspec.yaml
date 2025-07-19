@@ -22,12 +22,13 @@ dependencies:
   share_plus: ^7.2.0
   path_provider: ^2.1.1
   flutter_image_compress: ^2.1.0
-   fl_chart: ^0.63.0  
+  fl_chart: ^0.63.0  # ✅ Proper indentation here
   mobile_scanner: ^4.0.0
   nfc_manager: ^3.3.0
   pdf: ^3.10.0
   mailer: ^6.1.0
   open_filex: ^4.3.4
+
 
 dev_dependencies:
   flutter_test:
