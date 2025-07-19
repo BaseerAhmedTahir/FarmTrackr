@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:goat_tracker/models/expense_summary.dart';
+import 'package:goat_tracker/models/expense_summary.dart';
 
 abstract class Svc {
   static final _client = Supabase.instance.client;
@@ -81,27 +83,69 @@ abstract class Svc {
     return _client.from('v_goat_financials').select();
   }
 
-  // Get expense summary by category
-  static Stream<List<Map<String, dynamic>>> expenseSummary() {
+  // Get expense summary by month
+  static Stream<List<ExpenseSummary>> expenseSummary() {
     return _client.from('expenses')
-      .select('type, amount')
+      .select('date, amount')
+      .order('date')
       .asStream()
       .map((data) {
-        final Map<String, Map<String, dynamic>> summary = {};
-        for (final expense in data) {
-          final type = expense['type'] as String? ?? 'Other';
-          final amount = expense['amount'] != null ? (expense['amount'] as num).toDouble() : 0.0;
-          if (!summary.containsKey(type)) {
-            summary[type] = {'total': 0.0, 'count': 0};
-          }
-          summary[type]!['total'] = (summary[type]!['total'] as double) + amount;
-          summary[type]!['count'] = (summary[type]!['count'] as int) + 1;
+        final Map<String, double> monthlySummary = {};
+        
+        for (var expense in data) {
+          final date = DateTime.parse(expense['date']);
+          final month = '${date.year}-${date.month.toString().padLeft(2, '0')}';
+          final amount = expense['amount'].toDouble();
+          
+          monthlySummary[month] = (monthlySummary[month] ?? 0) + amount;
         }
-        return summary.entries.map((e) => {
-          'type': e.key,
-          'total': e.value['total'],
-          'count': e.value['count']
+        
+        return monthlySummary.entries.map((e) {
+          return ExpenseSummary(month: e.key, amount: e.value);
         }).toList();
+
+      });
+  }
+
+  // Get goat count by status
+  static Stream<Map<String, int>> goatCount() {
+    return _client.from('goats')
+      .select('status')
+      .asStream()
+      .map((rows) {
+        final counts = <String, int>{
+          'total': rows.length,
+          'active': 0,
+          'sold': 0,
+          'deceased': 0,
+        };
+        for (final row in rows) {
+          final status = row['status'] as String? ?? 'active';
+          counts[status] = (counts[status] ?? 0) + 1;
+        }
+        return counts;
+      });
+  }
+
+  // Get caretaker summary with their goats and profit share
+  static Stream<List<Map<String, dynamic>>> caretakerSummary() {
+    return _client.from('v_caretaker_summary')
+      .select()
+      .asStream()
+      .map((rows) {
+        final summaries = <Map<String, dynamic>>[];
+        for (final row in rows) {
+          summaries.add({
+            'id': row['id'] as String,
+            'name': row['name'] as String,
+            'goat_count': row['goat_count'] as int,
+            'total_investment': (row['total_investment'] as num?)?.toDouble() ?? 0,
+            'total_expenses': (row['total_expenses'] as num?)?.toDouble() ?? 0,
+            'total_sales': (row['total_sales'] as num?)?.toDouble() ?? 0,
+            'profit_share': (row['profit_share'] as num?)?.toDouble() ?? 0,
+          });
+        }
+        return summaries;
       });
   }
 
@@ -186,18 +230,47 @@ abstract class Svc {
   }
 
   // Sell a goat
-  static Future<void> sellGoat(String id, double price) async {
+  static Future<void> sellGoat(String id, double price, {String? buyerInfo}) async {
     try {
       final record = await _client.from('sales').insert({
         'goat_id': id,
         'sale_price': price,
         'sale_date': DateTime.now().toIso8601String(),
+        'buyer_info': buyerInfo,
       }).select().single();
 
       await _client.from('goats').update({'status': 'sold'}).eq('id', id);
 
+      // Calculate profit and update caretaker's share
+      final goat = await _client.from('v_goat_financials')
+        .select()
+        .eq('id', id)
+        .single();
+      
+      final purchasePrice = (goat['price'] as num).toDouble();
+      final totalExpense = (goat['total_expense'] as num?)?.toDouble() ?? 0;
+      final profit = price - (purchasePrice + totalExpense);
+      
+      if (profit > 0) {
+        final caretaker = await _client.from('caretakers')
+          .select()
+          .eq('id', goat['caretaker_id'])
+          .single();
+        
+        final profitShare = (caretaker['profit_share'] as num).toDouble();
+        final caretakerAmount = profit * (profitShare / 100);
+        
+        await _client.from('caretaker_payments').insert({
+          'caretaker_id': goat['caretaker_id'],
+          'goat_id': id,
+          'amount': caretakerAmount,
+          'sale_id': record['id'],
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+
       await _client.from('notifications').insert({
-        'message': 'Goat $id was sold for ₹$price',
+        'message': 'Goat $id was sold for ₹$price with profit of ₹${profit.toStringAsFixed(2)}',
         'type': 'sale',
         'record_id': record['id'],
         'read': false,
@@ -259,5 +332,60 @@ abstract class Svc {
       print('Error getting signed URL: $e');
       return '';
     }
+  }
+
+  // Sync data by refreshing all tables
+  static Future<void> syncData() async {
+    await Future.wait([
+      _client.from('expenses').select().limit(1),
+      _client.from('goats').select().limit(1),
+      _client.from('caretakers').select().limit(1),
+    ]);
+  }
+
+  // Export data for CSV
+  static Future<List<List<dynamic>>> exportData() async {
+    final finance = await getFinanceData();
+    final expenses = await _client.from('expenses').select();
+    final goats = await _client.from('goats').select();
+    final caretakers = await _client.from('caretakers').select();
+
+    // Convert data to CSV format
+    return [
+      // Headers
+      ['Type', 'Date', 'Amount', 'Description'],
+      
+      // Finance data
+      ...finance.map((f) => [
+        'Finance',
+        f['date'],
+        f['amount'],
+        f['description'] ?? '',
+      ]),
+
+      // Expenses data
+      ...expenses.map((e) => [
+        'Expense',
+        e['date'],
+        e['amount'],
+        e['description'] ?? '',
+      ]),
+
+      // Goats data
+      ...goats.map((g) => [
+        'Goat',
+        g['purchased_at'],
+        g['purchase_price'],
+        'Tag: ${g['tag_id']}',
+      ]),
+
+      // Caretakers data
+      ...caretakers.map((c) => [
+        'Caretaker',
+        c['joined_at'],
+        c['salary'],
+        c['name'],
+      ]),
+    ];
   }
 }
