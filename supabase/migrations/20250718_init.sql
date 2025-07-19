@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message TEXT NOT NULL,
     type VARCHAR NOT NULL,
-    record_id UUID NOT NULL,
+    goat_id UUID REFERENCES public.goats(id) ON DELETE CASCADE,
     read BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
@@ -224,9 +224,10 @@ USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
 CREATE POLICY "Users can view their notifications"
 ON public.notifications FOR SELECT
 TO authenticated
-USING (record_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
 
 CREATE POLICY "Users can manage their notifications"
 ON public.notifications FOR ALL
 TO authenticated
-USING (record_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
+USING (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()))
+WITH CHECK (goat_id IN (SELECT id FROM public.goats WHERE user_id = auth.uid()));
