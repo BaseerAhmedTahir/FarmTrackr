@@ -64,13 +64,12 @@ class Sale {
     return Sale(
       id: id ?? this.id,
       goatId: goatId ?? this.goatId,
+      userId: userId ?? this.userId,
       salePrice: salePrice ?? this.salePrice,
       buyerName: buyerName ?? this.buyerName,
-      paymentMode: paymentMode ?? this.paymentMode,
+      buyerContact: buyerContact ?? this.buyerContact,
       saleDate: saleDate ?? this.saleDate,
       notes: notes ?? this.notes,
-      userId: userId ?? this.userId,
-      buyerContact: buyerContact ?? this.buyerContact,
       createdAt: createdAt ?? this.createdAt,
     );
   }
