@@ -4,9 +4,10 @@ import 'package:flutter/foundation.dart';
 class Sale {
   final String id;
   final String goatId;
+  final String userId;
   final double salePrice;
   final String? buyerName;
-  final String paymentMode; // cash, bank, upi
+  final String? buyerContact;
   final DateTime saleDate;
   final String? notes;
   final DateTime createdAt;
@@ -14,9 +15,10 @@ class Sale {
   const Sale({
     required this.id,
     required this.goatId,
+    required this.userId,
     required this.salePrice,
     this.buyerName,
-    required this.paymentMode,
+    this.buyerContact,
     required this.saleDate,
     this.notes,
     required this.createdAt,
@@ -26,9 +28,10 @@ class Sale {
     return Sale(
       id: json['id'] as String,
       goatId: json['goat_id'] as String,
+      userId: json['user_id'] as String,
       salePrice: (json['sale_price'] as num).toDouble(),
       buyerName: json['buyer_name'] as String?,
-      paymentMode: json['payment_mode'] as String,
+      buyerContact: json['buyer_contact'] as String?,
       saleDate: DateTime.parse(json['sale_date'] as String),
       notes: json['notes'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -38,9 +41,10 @@ class Sale {
   Map<String, dynamic> toJson() => {
     'id': id,
     'goat_id': goatId,
+    'user_id': userId,
     'sale_price': salePrice,
     'buyer_name': buyerName,
-    'payment_mode': paymentMode,
+    'buyer_contact': buyerContact,
     'sale_date': saleDate.toIso8601String(),
     'notes': notes,
     'created_at': createdAt.toIso8601String(),
@@ -49,9 +53,10 @@ class Sale {
   Sale copyWith({
     String? id,
     String? goatId,
+    String? userId,
     double? salePrice,
     String? buyerName,
-    String? paymentMode,
+    String? buyerContact,
     DateTime? saleDate,
     String? notes,
     DateTime? createdAt,
@@ -64,6 +69,8 @@ class Sale {
       paymentMode: paymentMode ?? this.paymentMode,
       saleDate: saleDate ?? this.saleDate,
       notes: notes ?? this.notes,
+      userId: userId ?? this.userId,
+      buyerContact: buyerContact ?? this.buyerContact,
       createdAt: createdAt ?? this.createdAt,
     );
   }

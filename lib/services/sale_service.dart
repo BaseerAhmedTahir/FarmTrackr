@@ -39,11 +39,31 @@ class SaleService extends BaseService {
     }, 'fetching sale by ID');
   }
 
-  Future<Sale> createSale(Sale sale) async {
+  Future<Sale> createSale({
+    required String goatId,
+    required double salePrice,
+    required DateTime saleDate,
+    String? buyerName,
+    String? buyerContact,
+    String? notes,
+  }) async {
     return handleResponse(() async {
+      final user = supabase.auth.currentUser;
+      if (user == null) throw Exception('User must be authenticated to create a sale');
+
+      final sale = {
+        'goat_id': goatId,
+        'user_id': user.id,
+        'sale_price': salePrice,
+        'sale_date': saleDate.toIso8601String(),
+        'buyer_name': buyerName,
+        'buyer_contact': buyerContact,
+        'notes': notes,
+      };
+
       final response = await supabase
           .from(_tableName)
-          .insert(sale.toJson())
+          .insert(sale)
           .select()
           .single();
       
@@ -52,11 +72,12 @@ class SaleService extends BaseService {
           .from('goats')
           .update({
             'status': 'sold',
-            'sale_price': sale.salePrice,
-            'sale_date': sale.saleDate.toIso8601String(),
-            'buyer_name': sale.buyerName,
+            'sale_price': salePrice,
+            'sale_date': saleDate.toIso8601String(),
+            'buyer_name': buyerName,
+            'buyer_contact': buyerContact,
           })
-          .eq('id', sale.goatId);
+          .eq('id', goatId);
       
       return Sale.fromJson(response);
     }, 'creating sale');
