@@ -72,10 +72,6 @@ class SaleService extends BaseService {
           .from('goats')
           .update({
             'status': 'sold',
-            'sale_price': salePrice,
-            'sale_date': saleDate.toIso8601String(),
-            'buyer_name': buyerName,
-            'buyer_contact': buyerContact,
           })
           .eq('id', goatId);
       
@@ -92,12 +88,11 @@ class SaleService extends BaseService {
           .select()
           .single();
       
-      // Update goat sale details
+      // Update goat status to sold
       await supabase
           .from('goats')
           .update({
-            'sale_price': sale.salePrice,
-            'sale_date': sale.saleDate.toIso8601String(),
+            'status': 'sold',
             'buyer_info': sale.buyerName,
           })
           .eq('id', sale.goatId);
