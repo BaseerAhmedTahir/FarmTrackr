@@ -1,0 +1,43 @@
+// Inside Svc class
+
+  // Get goat count by status
+  static Stream<Map<String, int>> goatCount() {
+    return _client.from('goats')
+      .select('status')
+      .asStream()
+      .map((rows) {
+        final counts = <String, int>{
+          'total': rows.length,
+          'active': 0,
+          'sold': 0,
+          'deceased': 0,
+        };
+        for (final row in rows) {
+          final status = row['status'] as String? ?? 'active';
+          counts[status] = (counts[status] ?? 0) + 1;
+        }
+        return counts;
+      });
+  }
+
+  // Get caretaker summary with their goats and profit share
+  static Stream<List<Map<String, dynamic>>> caretakerSummary() {
+    return _client.from('v_caretaker_summary')
+      .select()
+      .asStream()
+      .map((rows) {
+        final summaries = <Map<String, dynamic>>[];
+        for (final row in rows) {
+          summaries.add({
+            'id': row['id'] as String,
+            'name': row['name'] as String,
+            'goat_count': row['goat_count'] as int,
+            'total_investment': (row['total_investment'] as num?)?.toDouble() ?? 0,
+            'total_expenses': (row['total_expenses'] as num?)?.toDouble() ?? 0,
+            'total_sales': (row['total_sales'] as num?)?.toDouble() ?? 0,
+            'profit_share': (row['profit_share'] as num?)?.toDouble() ?? 0,
+          });
+        }
+        return summaries;
+      });
+  }

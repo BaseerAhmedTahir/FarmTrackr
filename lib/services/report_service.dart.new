@@ -1,0 +1,155 @@
+import 'dart:io';
+import 'package:intl/intl.dart';
+import 'package:goat_tracker/models/goat.dart';
+import 'package:goat_tracker/models/sale.dart';
+import 'package:goat_tracker/models/expense.dart';
+import 'package:goat_tracker/models/financial_summary.dart';
+import 'package:goat_tracker/services/base_service.dart';
+import 'package:goat_tracker/services/pdf_service.dart';
+import 'package:goat_tracker/services/email_service.dart';
+
+class ReportService extends BaseService {
+  final PDFService _pdfService;
+  final EmailService _emailService;
+
+  ReportService(this._pdfService, this._emailService);
+
+  Future<Map<String, dynamic>> getAnalytics({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    return handleResponse(() async {
+      final now = DateTime.now();
+      startDate ??= DateTime(now.year, now.month, 1);
+      endDate ??= DateTime(now.year, now.month + 1, 0);
+
+      final response = await supabase.rpc('get_farm_analytics', params: {
+        'start_date': startDate.toIso8601String(),
+        'end_date': endDate.toIso8601String(),
+      });
+
+      return response as Map<String, dynamic>;
+    }, 'fetching farm analytics');
+  }
+
+  Future<List<Map<String, dynamic>>> getMonthlyTrends() async {
+    return handleResponse(() async {
+      final response = await supabase.rpc('get_monthly_trends');
+      return (response as List).cast<Map<String, dynamic>>();
+    }, 'fetching monthly trends');
+  }
+
+  Future<Map<String, dynamic>> getBreedPerformance() async {
+    return handleResponse(() async {
+      final response = await supabase.rpc('get_breed_performance');
+      return response as Map<String, dynamic>;
+    }, 'fetching breed performance');
+  }
+
+  Future<Map<String, dynamic>> getCaretakerPerformance() async {
+    return handleResponse(() async {
+      final response = await supabase.rpc('get_caretaker_performance');
+      return response as Map<String, dynamic>;
+    }, 'fetching caretaker performance');
+  }
+
+  Future<File> generateMonthlyReport({
+    required String recipientEmail,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final now = DateTime.now();
+    startDate ??= DateTime(now.year, now.month, 1);
+    endDate ??= DateTime(now.year, now.month + 1, 0);
+
+    final analytics = await getAnalytics(startDate: startDate, endDate: endDate);
+    final trends = await getMonthlyTrends();
+    final breedPerformance = await getBreedPerformance();
+    final caretakerPerformance = await getCaretakerPerformance();
+
+    // Get all required data
+    final sales = await supabase
+        .from('sales')
+        .select()
+        .gte('sale_date', startDate.toIso8601String())
+        .lte('sale_date', endDate.toIso8601String())
+        .order('sale_date');
+
+    final expenses = await supabase
+        .from('expenses')
+        .select()
+        .gte('date', startDate.toIso8601String())
+        .lte('date', endDate.toIso8601String())
+        .order('date');
+
+    final summary = FinancialSummary(
+      activeGoats: analytics['active_goats'],
+      soldGoats: analytics['sold_goats'],
+      deadGoats: analytics['dead_goats'],
+      totalInvestment: analytics['total_investment'],
+      totalSales: analytics['total_sales'],
+      totalProfit: analytics['total_profit'],
+    );
+
+    // Generate PDF report
+    final reportFile = await _pdfService.generateFinancialReport(
+      summary,
+      (sales as List).map((s) => Sale.fromJson(s)).toList(),
+      (expenses as List).map((e) => Expense.fromJson(e)).toList(),
+      startDate,
+      endDate,
+    );
+
+    // Send email if recipient is provided
+    if (recipientEmail.isNotEmpty) {
+      await _emailService.sendReport(
+        recipientEmail: recipientEmail,
+        subject: 'Monthly Farm Report - ${DateFormat.yMMMM().format(startDate)}',
+        body: '''
+Dear Farm Manager,
+
+Please find attached the monthly farm report for ${DateFormat.yMMMM().format(startDate)}.
+
+Summary:
+- Active Goats: ${summary.activeGoats}
+- Total Sales: Rs. ${summary.totalSales}
+- Total Profit: Rs. ${summary.totalProfit}
+
+Best regards,
+Goat Tracker
+''',
+        attachment: reportFile,
+      );
+    }
+
+    return reportFile;
+  }
+
+  Future<File> generateBreedAnalysisReport() async {
+    return handleResponse(() async {
+      final breedPerformance = await getBreedPerformance();
+      // TODO: Implement breed analysis report generation using PDFService
+      throw UnimplementedError();
+    }, 'generating breed analysis report');
+  }
+
+  Future<File> generateCaretakerReport(String caretakerId) async {
+    return handleResponse(() async {
+      final performance = await getCaretakerPerformance();
+      // TODO: Implement caretaker report generation using PDFService
+      throw UnimplementedError();
+    }, 'generating caretaker report');
+  }
+
+  Future<void> scheduleMonthlyReport(String email) async {
+    return handleResponse(() async {
+      await supabase.from('report_schedules').insert({
+        'email': email,
+        'frequency': 'monthly',
+        'next_run': DateTime.now().add(Duration(days: 1))
+            .copyWith(hour: 0, minute: 0, second: 0, microsecond: 0)
+            .toIso8601String(),
+      });
+    }, 'scheduling monthly report');
+  }
+}
