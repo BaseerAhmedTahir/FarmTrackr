@@ -62,7 +62,7 @@ const _$HealthRecordTypeEnumMap = {
 
 const _$HealthStatusEnumMap = {
   HealthStatus.healthy: 'healthy',
-  HealthStatus.under_treatment: 'under_treatment',
+  HealthStatus.underTreatment: 'underTreatment',
   HealthStatus.recovered: 'recovered',
   HealthStatus.deceased: 'deceased',
 };

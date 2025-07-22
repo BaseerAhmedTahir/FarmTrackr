@@ -1,7 +1,5 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
 
-part 'enums.freezed.dart';
-part 'enums.g.dart';
+// ignore_for_file: constant_identifier_names
 
 enum GoatStatus {
   active,
@@ -26,7 +24,7 @@ enum HealthRecordType {
 
 enum HealthStatus {
   healthy,
-  under_treatment,
+  underTreatment, // Fixed lowerCamelCase
   recovered,
   deceased
 }
