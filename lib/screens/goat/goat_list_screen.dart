@@ -1,53 +1,46 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../models/goat.dart';
+import '../../providers.dart';
 
-class GoatListScreen extends StatefulWidget {
+extension GoatStatusX on GoatStatus {
+  Color get color {
+    switch (this) {
+      case GoatStatus.active:
+        return Colors.green;
+      case GoatStatus.sold:
+        return Colors.blue;
+      case GoatStatus.dead:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+}
+
+class GoatListScreen extends ConsumerWidget {
   const GoatListScreen({super.key});
 
   @override
-  State<GoatListScreen> createState() => _GoatListScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final goatsAsyncValue = ref.watch(goatsProvider);
 
-class _GoatListScreenState extends State<GoatListScreen> {
-  Future<List<Map<String, dynamic>>> _fetchGoats() async {
-    try {
-      final response = await Supabase.instance.client
-          .from('goats')
-          .select()
-          .order('tag_number');
-      return response as List<Map<String, dynamic>>;
-    } catch (e) {
-      // Handle error appropriately
-      print('Error fetching goats: $e');
-      return [];
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Goats'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => context.push('/goats/add'),
+          ),
+        ],
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _fetchGoats(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}'),
-            );
-          }
-
-          final goats = snapshot.data ?? [];
-
+      body: goatsAsyncValue.when(
+        data: (goats) {
           if (goats.isEmpty) {
             return const Center(
-              child: Text('No goats found'),
+              child: Text('No goats found. Add your first goat!'),
             );
           }
 
@@ -55,23 +48,44 @@ class _GoatListScreenState extends State<GoatListScreen> {
             itemCount: goats.length,
             itemBuilder: (context, index) {
               final goat = goats[index];
-              final id = goat['id'] as String?;
-              if (id == null) return const SizedBox.shrink();
               
               return ListTile(
                 leading: CircleAvatar(
-                  child: Text(goat['tag_number']?.toString().substring(0, 1) ?? '?'),
+                  backgroundColor: Theme.of(context).primaryColor,
+                  child: Text(
+                    goat.tagNumber.substring(0, 1).toUpperCase(),
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
-                title: Text(goat['tag_number']?.toString() ?? 'No tag'),
-                subtitle: Text(goat['breed']?.toString() ?? 'Unknown breed'),
-                trailing: Text(
-                  goat['status']?.toString() ?? 'Active',
+                title: Text(goat.tagNumber),
+                subtitle: Text(goat.name ?? ''),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: goat.status.color,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        goat.status.name.toUpperCase(),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right),
+                  ],
                 ),
-                onTap: () => context.go('/goats/$id'),
+                onTap: () => context.push('/goats/${goat.id}'),
               );
             },
           );
         },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => Center(
+          child: Text('Error: $error'),
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/notification.dart' as goat_notification;
 
 /// Service class to handle notification-related operations
 class NotificationService {
@@ -9,7 +10,7 @@ class NotificationService {
 
   /// Stream of notifications ordered by creation date
   /// Returns a stream of notifications with proper error handling
-  Stream<List<Map<String, dynamic>>> notificationStream() {
+  Stream<List<goat_notification.Notification>> watchNotifications() {
     try {
       return _client
           .from('notifications')
@@ -18,24 +19,10 @@ class NotificationService {
           .order('created_at', ascending: false)
           .map((event) {
             try {
-              return event.map((e) {
-                final map = e;
-                // Ensure required fields exist with default values
-                return {
-                  ...map,
-                  'id': map['id']?.toString() ?? '',
-                  'title': map['title']?.toString() ?? 'Notification',
-                  'message': map['message']?.toString() ?? '',
-                  'type': map['type']?.toString() ?? 'system',
-                  'read': map['read'] as bool? ?? false,
-                  'created_at': map['created_at']?.toString() ?? DateTime.now().toIso8601String(),
-                  'user_id': map['user_id']?.toString() ?? _client.auth.currentUser?.id ?? '',
-                  'metadata': map['metadata'] as Map<String, dynamic>? ?? {},
-                };
-              }).toList();
+              return event.map((e) => goat_notification.Notification.fromJson(e)).toList();
             } catch (e) {
               debugPrint('Error processing notification data: $e');
-              return <Map<String, dynamic>>[];
+              return <goat_notification.Notification>[];
             }
           })
           .handleError((error) {
@@ -44,7 +31,7 @@ class NotificationService {
           });
     } catch (e) {
       debugPrint('Error setting up notification stream: $e');
-      return Stream.value(<Map<String, dynamic>>[]);
+      return Stream.value(<goat_notification.Notification>[]);
     }
   }
 

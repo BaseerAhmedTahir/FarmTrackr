@@ -1,19 +1,22 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:goat_tracker/models/goat.dart';
-import 'package:goat_tracker/models/sale.dart';
-import 'package:goat_tracker/models/expense.dart';
-import 'package:goat_tracker/models/financial_summary.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:open_filex/open_filex.dart';
 import 'package:goat_tracker/services/base_service.dart';
-import 'package:goat_tracker/services/pdf_service.dart';
 import 'package:goat_tracker/services/email_service.dart';
 
 class ReportService extends BaseService {
-  final PDFService _pdfService;
+  final pdf = pw.Document();
   final EmailService _emailService;
+  late final double totalInvestment;
+  late final double totalSales;
+  late final double totalExpenses;
+  late final List<Map<String, dynamic>> expenses;
+  final dateFormat = DateFormat('dd/MM/yyyy');
 
-  ReportService(this._pdfService, this._emailService);
+  ReportService(this._emailService);
 
   Future<Map<String, dynamic>> getAnalytics({
     DateTime? startDate,
@@ -25,11 +28,17 @@ class ReportService extends BaseService {
       endDate ??= DateTime(now.year, now.month + 1, 0);
 
       final response = await supabase.rpc('get_farm_analytics', params: {
-        'start_date': startDate.toIso8601String(),
-        'end_date': endDate.toIso8601String(),
+        'start_date': startDate?.toIso8601String(),
+        'end_date': endDate?.toIso8601String(),
       });
 
-      return response as Map<String, dynamic>;
+      final data = response as Map<String, dynamic>;
+      totalInvestment = (data['total_investment'] as num).toDouble();
+      totalSales = (data['total_sales'] as num).toDouble();
+      totalExpenses = (data['total_expenses'] as num).toDouble();
+      expenses = (data['expense_breakdown'] as List).cast<Map<String, dynamic>>();
+
+      return data;
     }, 'fetching farm analytics');
   }
 
@@ -55,14 +64,44 @@ class ReportService extends BaseService {
   }
 
   Future<File> generateMonthlyReport({
-    required String recipientEmail,
-    DateTime? startDate,
-    DateTime? endDate,
+    required DateTime? startDate,
+    required DateTime? endDate,
   }) async {
-    final analytics = await getAnalytics(startDate: startDate, endDate: endDate);
-    final trends = await getMonthlyTrends();
-    final breedPerformance = await getBreedPerformance();
-    final caretakerPerformance = await getCaretakerPerformance();
+    await getAnalytics(startDate: startDate, endDate: endDate);
+
+    pdf.addPage(
+      pw.MultiPage(
+        build: (context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Text('Monthly Farm Report', style: pw.TextStyle(fontSize: 24)),
+          ),
+          pw.Paragraph(
+            text: 'Report Period: ${dateFormat.format(startDate ?? DateTime.now())} to ${dateFormat.format(endDate ?? DateTime.now())}',
+          ),
+          pw.Container(
+            padding: pw.EdgeInsets.all(16),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300),
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Financial Summary',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.green800,
+                  ),
+                ),
+                pw.SizedBox(height: 12),
+                pw.Table.fromTextArray(
+                  context: context,
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellHeight: 30,
+                  data: [
                     ['Category', 'Amount (₹)'],
                     ['Total Investment', totalInvestment.toStringAsFixed(2)],
                     ['Total Sales', totalSales.toStringAsFixed(2)],
@@ -74,10 +113,8 @@ class ReportService extends BaseService {
             ),
           ),
           pw.SizedBox(height: 20),
-
-          // Expense Breakdown
           pw.Container(
-            padding: const pw.EdgeInsets.all(16),
+            padding: pw.EdgeInsets.all(16),
             decoration: pw.BoxDecoration(
               border: pw.Border.all(color: PdfColors.grey300),
               borderRadius: pw.BorderRadius.circular(8),
@@ -90,7 +127,7 @@ class ReportService extends BaseService {
                   style: pw.TextStyle(
                     fontSize: 18,
                     fontWeight: pw.FontWeight.bold,
-                    color: PdfColor.fromHex('#2E7D32'),
+                    color: PdfColors.green800,
                   ),
                 ),
                 pw.SizedBox(height: 12),
@@ -127,32 +164,24 @@ class ReportService extends BaseService {
     return file;
   }
 
-  static Future<void> sendReportByEmail({
+  Future<void> sendReportByEmail({
     required String email,
     required File report,
   }) async {
-    final smtpServer = gmail('your-email@gmail.com', 'your-app-password');
-    
-    final message = Message()
-      ..from = Address('your-email@gmail.com', 'Goat Tracker')
-      ..recipients.add(email)
-      ..subject = 'Monthly Farm Report - ${DateFormat.yMMM().format(DateTime.now())}'
-      ..text = 'Please find attached your monthly farm report.'
-      ..attachments = [
-        FileAttachment(report)
-          ..location = Location.attachment
-          ..fileName = 'monthly_report.pdf'
-      ];
-
     try {
-      await send(message, smtpServer);
+      await _emailService.sendReport(
+        recipientEmail: email,
+        subject: 'Monthly Farm Report - ${DateFormat.yMMM().format(DateTime.now())}',
+        body: 'Please find attached your monthly farm report.',
+        attachment: report,
+      );
     } catch (e) {
       throw Exception('Failed to send email: $e');
     }
   }
 
-  static Future<void> viewReport() async {
-    final file = await generateMonthlyReport();
+  Future<void> viewReport({DateTime? startDate, DateTime? endDate}) async {
+    final file = await generateMonthlyReport(startDate: startDate, endDate: endDate);
     await OpenFilex.open(file.path);
   }
 }

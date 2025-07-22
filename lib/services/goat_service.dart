@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'package:goat_tracker/models/goat.dart';
-import 'package:goat_tracker/models/weight_record.dart';
 import 'package:goat_tracker/models/financial_summary.dart';
+import 'package:goat_tracker/models/weight_log.dart';
 import 'package:goat_tracker/services/base_service.dart';
 
 class GoatService extends BaseService {
@@ -42,6 +42,16 @@ class GoatService extends BaseService {
             : FinancialSummary.empty());
   }
 
+  Stream<Goat> watchGoat(String id) {
+    return supabase
+        .from(_tableName)
+        .stream(primaryKey: ['id'])
+        .eq('id', id)
+        .map((response) => response.isNotEmpty
+            ? Goat.fromJson(response.first)
+            : throw Exception('Goat not found'));
+  }
+
   Future<Goat> getGoatById(String id) async {
     return handleResponse(() async {
       final response = await supabase
@@ -56,21 +66,17 @@ class GoatService extends BaseService {
 
   Future<Goat> createGoat(Goat goat, File? photo) async {
     return handleResponse(() async {
-      String? photoUrl;
-      String qrUrl;
+      List<String> photoUrls = [];
 
       if (photo != null) {
-        photoUrl = await uploadGoatPhoto(photo, goat.id);
+        final photoUrl = await uploadGoatPhoto(photo, goat.id);
+        photoUrls.add(photoUrl);
       }
-
-      // Generate QR code URL
-      qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=goat:${goat.tagNumber}';
 
       // Create goat record with URLs
       final response = await supabase.from(_tableName).insert({
         ...goat.toJson(),
-        'qr_url': qrUrl,
-        'photo_url': photoUrl,
+        'photo_urls': photoUrls,
       }).select().single();
 
       return Goat.fromJson(response);
@@ -79,17 +85,18 @@ class GoatService extends BaseService {
 
   Future<Goat> updateGoat(Goat goat, {File? newPhoto}) async {
     return handleResponse(() async {
-      String? photoUrl = goat.photoUrl;
+      List<String> photoUrls = List.from(goat.photoUrls);
       
       if (newPhoto != null) {
-        photoUrl = await uploadGoatPhoto(newPhoto, goat.id);
+        final newPhotoUrl = await uploadGoatPhoto(newPhoto, goat.id);
+        photoUrls.add(newPhotoUrl);
       }
 
       final response = await supabase
           .from(_tableName)
           .update({
             ...goat.toJson(),
-            'photo_url': photoUrl,
+            'photo_urls': photoUrls,
           })
           .eq('id', goat.id)
           .select()
@@ -103,9 +110,11 @@ class GoatService extends BaseService {
     return handleResponse(() async {
       final goat = await getGoatById(id);
       
-      // Delete photo if exists
-      final filePath = goat.photoUrl.split('/').last;
-      await supabase.storage.from(_storageBucket).remove(['photos/$filePath']);
+      // Delete photos if they exist
+      for (final photoUrl in goat.photoUrls) {
+        final filePath = photoUrl.split('/').last;
+        await supabase.storage.from(_storageBucket).remove(['photos/$filePath']);
+      }
 
       await supabase
           .from(_tableName)
@@ -129,44 +138,70 @@ class GoatService extends BaseService {
     }, 'uploading goat photo');
   }
 
-  Future<void> addWeight(String goatId, double weight) async {
+  Future<void> addWeight(String goatId, double weightKg) async {
     return handleResponse(() async {
-      final goat = await getGoatById(goatId);
-      final weightRecord = WeightRecord(
-        weight: weight,
-        date: DateTime.now(),
-        goatId: goatId,
-      );
-      final updatedHistory = [...goat.weightHistory, weightRecord];
+      final user = supabase.auth.currentUser;
+      if (user == null) throw Exception('User must be authenticated to add weight');
+
+      final weightLog = {
+        'goat_id': goatId,
+        'weight_kg': weightKg,
+        'measurement_date': DateTime.now().toIso8601String(),
+        'user_id': user.id,
+      };
       
+      await supabase.from('weight_logs').insert(weightLog);
       await supabase
           .from(_tableName)
-          .update({'weight_history': updatedHistory.map((w) => w.toJson()).toList()})
+          .update({'last_weight_kg': weightKg})
           .eq('id', goatId);
     }, 'adding weight record');
   }
 
-  Future<void> markAsSold(String goatId, double salePrice, String? buyerInfo) async {
+  Future<void> markAsSold(String goatId, double salePrice, String? buyerName, String? buyerContact, String? reasonForSale) async {
     return handleResponse(() async {
+      final user = supabase.auth.currentUser;
+      if (user == null) throw Exception('User must be authenticated to mark goat as sold');
+
       final now = DateTime.now();
+      
+      // Create sale record
+      final sale = {
+        'goat_id': goatId,
+        'sale_price': salePrice,
+        'sale_date': now.toIso8601String(),
+        'buyer_name': buyerName,
+        'buyer_contact': buyerContact,
+        'notes': reasonForSale,
+        'user_id': user.id,
+      };
+
+      await supabase.from('sales').insert(sale);
+
+      // Update goat status
       await supabase
           .from(_tableName)
           .update({
             'status': GoatStatus.sold.name,
-            'sale_price': salePrice,
-            'sale_date': now.toIso8601String(),
-            'buyer_info': buyerInfo,
+            'reason_for_sale': reasonForSale,
           })
           .eq('id', goatId);
     }, 'marking goat as sold');
   }
 
-  Future<void> markAsDead(String goatId) async {
+  Future<void> markAsDead(String goatId, {String? reason}) async {
     return handleResponse(() async {
-      await supabase
-          .from(_tableName)
-          .update({'status': GoatStatus.dead.name})
-          .eq('id', goatId);
+      final user = supabase.auth.currentUser;
+      if (user == null) throw Exception('User must be authenticated to update goat status');
+
+      await supabase.rpc(
+        'update_goat_status',
+        params: {
+          'goat_id': goatId,
+          'new_status': GoatStatus.dead.name,
+          'reason': reason,
+        },
+      );
     }, 'marking goat as dead');
   }
 }

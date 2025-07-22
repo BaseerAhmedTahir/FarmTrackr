@@ -84,7 +84,7 @@ class PDFReportService {
       padding: const pw.EdgeInsets.symmetric(vertical: 10),
       child: pw.Text(
         'Period: ${_dateFormat.format(start)} - ${_dateFormat.format(end)}',
-        style: pw.TextStyle(fontSize: 14),
+        style: const pw.TextStyle(fontSize: 14),
       ),
     );
   }
@@ -231,7 +231,7 @@ class PDFReportService {
         ),
         ...expenses.map((expense) => pw.TableRow(
           children: [
-            _buildTableCell(_dateFormat.format(expense.date)),
+            _buildTableCell(_dateFormat.format(expense.expenseDate)),
             _buildTableCell(expense.type.name),
             _buildTableCell('Rs. ${expense.amount}'),
             _buildTableCell(expense.notes ?? ''),
