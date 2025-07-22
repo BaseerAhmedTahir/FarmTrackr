@@ -3,15 +3,30 @@ name: Flutter CI
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
+      # Checkout the repository
       - uses: actions/checkout@v3
+
+      # Setup Flutter
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.13.0'
+          flutter-version: '3.32.7'  # Updated to match Dart SDK 3.5.0 requirement
+
+      # Install dependencies
       - run: flutter pub get
+
+      # Run build_runner to generate *.g.dart and *.freezed.dart files
+      - run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      # Run static analysis
       - run: flutter analyze
+
+      # Run unit and widget tests
       - run: flutter test
